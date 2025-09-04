@@ -4,30 +4,6 @@ import "fmt"
 import "types"
 
 
-# for final test
-examples :: [
-  `Name,Age,City
-Alice,30,New York
-Bob,25,London
-Charlie,35,Paris
-  `,
-  `
-Customer ID,First Name,Last Name,Email,Country
-101,Sarah,Smith,sarah.smith@example.com,USA
-102,John,Doe,john.doe@example.com,Canada
-103,Maria,Garcia,maria.garcia@example.com,Spain
-  `
-]
-
-# * THE PLAN
-# Design a struct with a set of fields and methods
-# the fields are going to be header, size of the header
-# methods of it, are going to be:
-# getField: gets all the values in the field
-#           support pagination here
-# getRow: get all a row of the csv
-#           support pagination here
-
 CSV :: struct {
   text := "",
   header := nul,
@@ -111,18 +87,23 @@ CSV :: struct {
   }
 }
 
+# ! usage examples
+# input :: `Name,Age,City
+# Alice,30,New York
+# Bob,25,London
+# Charlie,35,Paris
+# `
 
-# usage examples
-main :: fn() {
-  csv := CSV{
-      text: strings.trimSpace(examples[0])
-  }
-  csv.parse()
-  valueOfName := csv.getFieldValues("Name", 0,2)
-  fmt.println(valueOfName)
-  ids := ["125","325","12"]
-  csv.insertNewField(0, "id", ids)
-  fmt.println(csv.formatToCsv())
-}
+# main :: fn() {
+#   csv := CSV{
+#       text: strings.trimSpace(input)
+#   }
+#   csv.parse()
+#   valueOfName := csv.getFieldValues("Name", 0,2)
+#   fmt.println(valueOfName)
+#   ids := ["125","325","12"]
+#   csv.insertNewField(0, "id", ids)
+#   fmt.println(csv.formatToCsv())
+# }
 
-main()
+# main()
