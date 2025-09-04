@@ -1,0 +1,128 @@
+import "strings"
+import "array"
+import "fmt"
+import "types"
+
+
+# for final test
+examples :: [
+  `Name,Age,City
+Alice,30,New York
+Bob,25,London
+Charlie,35,Paris
+  `,
+  `
+Customer ID,First Name,Last Name,Email,Country
+101,Sarah,Smith,sarah.smith@example.com,USA
+102,John,Doe,john.doe@example.com,Canada
+103,Maria,Garcia,maria.garcia@example.com,Spain
+  `
+]
+
+# * THE PLAN
+# Design a struct with a set of fields and methods
+# the fields are going to be header, size of the header
+# methods of it, are going to be:
+# getField: gets all the values in the field
+#           support pagination here
+# getRow: get all a row of the csv
+#           support pagination here
+
+CSV :: struct {
+  text := "",
+  header := nul,
+  cols := [],
+  rows := nul,
+
+  parse: fn(self) {
+    # read the text
+    lines := strings.split(self.text, "\n")
+    # set the header
+    self.header = strings.split(lines[0], ",")
+    fieldCount := len(self.header)
+    # set the rows
+    self.rows = lines[1:]
+    # parse the cols
+    start :: 0
+    for id in start..fieldCount {
+      col := []
+      for _, line in self.rows {
+        valueFields := strings.split(line, ",")
+        array.append(col, valueFields[id])
+      }
+      # fixed by not copying the value directly to the field
+      array.append(self.cols, col)
+    }
+  },
+
+  _constructRows: fn(self, size) {
+    # to flush the self.rows, a bug with self.rows = [], instead use the clear function in the stdlib
+    clear(self.rows)
+    start :: 0
+    for idx in start..size {
+      text := []
+      for id in start..=size {
+        array.append(text,self.cols[id][idx])
+      }
+      array.append(self.rows, strings.join(text, ","))
+    }
+  },
+
+  insertNewField: fn(self, position, fieldName, values) {
+    # check that the fieldName is of type string
+    assert(typeOf(fieldName) != types.STRING, "fieldName is expected to be string")
+
+    # check that the values is an array of string
+    assert(typeOf(values) != types.ARRAY, "values is expected to be string")
+
+    size :: len(self.header)
+    # insert at position order
+    assert(position < 0 || position - size > 1, "position needs to be > 0 ||  position - size == 1")
+
+    array.insert(self.header, position, fieldName)
+    array.insert(self.cols, position, values)
+
+    # update the rows
+    self._constructRows(size)
+  },
+
+  formatToCsv: fn(self) {
+    text := strings.join(self.header, ",")
+    text += "\n"
+    text += strings.join(self.rows, "\n")
+    self.text = text
+    return text
+  },
+
+  getFieldValues: fn(self, fieldName, start, end) {
+    # search for the fieldName in the header
+    assert(typeOf(fieldName) != types.STRING, "fieldName is expected to be string")
+
+    index := array.index(self.header, fieldName)
+    if index == -1 {
+      return
+    }
+
+    return self.cols[index][start:end]
+  },
+
+  getRowValues: fn(self, idx) {
+    return self.rows[idx]
+  }
+}
+
+
+# usage examples
+main :: fn() {
+  csv := CSV{
+      text: strings.trimSpace(examples[0])
+  }
+  csv.parse()
+  valueOfName := csv.getFieldValues("Name", 0,2)
+  fmt.println(valueOfName)
+  ids := ["125","325","12"]
+  csv.insertNewField(0, "id", ids)
+  fmt.println(csv.formatToCsv())
+}
+
+main()
