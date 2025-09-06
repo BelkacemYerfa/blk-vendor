@@ -1,0 +1,658 @@
+import "array"
+import "fmt"
+import "types"
+import "strings"
+import "hashmap"
+
+
+Token :: struct {
+  kind := "",
+  text := "",
+  row := 0,
+  col := 0
+}
+
+keywords := {
+  "null" : "null",
+  "false": "boolean",
+  "true": "boolean"
+}
+
+Lexer :: struct {
+  # reset to be an array
+  text := "",
+  row := 0,
+  col := 0,
+  cur := 0,
+
+  _readChar: fn(self) {
+    if self.cur >= len(self.text) {
+      # reach end of file
+      self.cur = 0
+      return
+    }
+
+    char := self.text[self.cur]
+
+    if string(char) == "\n" {
+      self.row++
+      self.col = 1
+    } else {
+      self.col++
+    }
+
+    # increment to deal with the next char
+    self.cur++
+  },
+
+  _isSpace: fn(self) {
+    spaceChar := ["\t", "\n", "\v", "\f", "\r", " "]
+    idx := array.index(spaceChar, string(self.text[self.cur]))
+    return idx != -1
+  },
+
+  _isDigit: fn(self, char) {
+    # assert type
+    assert(typeOf(char) != types.CHAR, "expected a char type, instead got " + typeOf(char))
+
+    return '0' <= char && char <= '9'
+  },
+
+  _isLetter: fn(self, char) {
+    assert(typeOf(char) != types.CHAR, "expected a char type, instead got " + typeOf(char))
+
+    return (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z')
+  },
+
+  _skipWhiteSpace: fn(self) {
+    while self.cur < len(self.text) && self._isSpace() {
+      self._readChar()
+    }
+  },
+
+  _readString: fn(self) {
+    start := self.cur + 1 # skip the opening quote
+    row := self.row
+    col := self.col
+    self.cur++
+    while self.cur < len(self.text) && self.text[self.cur] != '"' {
+		  ch := self.text[self.cur]
+      if string(ch) == "\n" {
+        return Token{
+          kind: "error",
+          text: "string literal isn't terminated",
+          row: row,
+          col: col
+        }
+      }
+      self._readChar()
+	  }
+
+    end := self.cur
+    self._readChar() # consume the closing quote
+    text := string(self.text[start:end])
+
+	  return Token{
+      kind: "string",
+      text: text,
+      row: row,
+      col: col
+    }
+  },
+
+  _readIdent: fn(self) {
+    start := self.cur # skip the opening quote
+    row := self.row
+    col := self.col
+
+    while self.cur < len(self.text) && (self._isLetter(self.text[self.cur]) || self._isDigit(self.text[self.cur])) {
+      self._readChar()
+    }
+
+    text := string(self.text[start:self.cur])
+
+    return Token{
+      kind: keywords[text],
+      text: text,
+      row: row,
+      col: col
+    }
+  },
+
+  _readNumber: fn(self) {
+    start := self.cur
+    row := self.row
+    col := self.col
+
+    while self.cur < len(self.text) && self._isDigit(self.text[self.cur]) {
+	  	self._readChar()
+	  }
+
+    # float number type
+    if self.cur < len(self.text) && self.text[self.cur] == '.' {
+      self._readChar() # consume '.'
+      # Read fractional part
+			while self.cur < len(self.text) && self._isDigit(self.text[self.cur]) {
+				self._readChar()
+			}
+
+      text := string(self.text[start:self.cur])
+
+			return Token{
+        kind: "float",
+        text: text,
+				row: row,
+				col: col
+			}
+    }
+
+    # int number type
+    text := string(self.text[start:self.cur])
+
+    return Token{
+      kind: "int",
+      text: text,
+      row: row,
+      col: col
+    }
+  },
+
+  nextToken: fn(self) {
+    self._skipWhiteSpace()
+
+    token := Token{
+      row: self.row,
+      col: self.col
+    }
+
+
+    if self.cur >= len(self.text) {
+      return Token {
+        kind : "eof",
+        text : "",
+        row: token.row,
+        col: token.col
+      }
+	  }
+
+    char := self.text[self.cur]
+
+    if self._isSpace() {
+      # skip space
+      self._skipWhiteSpace()
+    } else if char == '"' {
+      # read string
+      return self._readString()
+    } else if char == '[' {
+      # bracket open
+      self._readChar()
+      return Token {
+        kind : "[",
+        text : "[",
+        row: token.row,
+        col: token.col
+      }
+    } else if char == ']' {
+      # bracket close
+      self._readChar()
+      return Token {
+        kind : "]",
+        text : "]",
+        row: token.row,
+        col: token.col
+      }
+    } else if char == '{' {
+      # brace open
+      self._readChar()
+      return Token {
+        kind : "{",
+        text : "{",
+        row: token.row,
+        col: token.col
+      }
+    } else if char == '}' {
+      # brace close
+      self._readChar()
+      return Token {
+        kind : "}",
+        text : "}",
+        row: token.row,
+        col: token.col
+      }
+    } else if char == ',' {
+      # comma
+      self._readChar()
+      return Token {
+        kind : ",",
+        text : ",",
+        row: token.row,
+        col: token.col
+      }
+    } else if char == ':' {
+      # colon
+      self._readChar()
+      return Token {
+        kind : ":",
+        text : ":",
+        row: token.row,
+        col: token.col
+      }
+    } else if self._isDigit(char) {
+      return self._readNumber()
+    } else if self._isLetter(char) {
+      return self._readIdent()
+    } else {
+      # error
+      self._readChar()
+      return Token {
+        kind:"error",
+        text: "unrecognized token",
+        row: token.row,
+        col: token.col
+      }
+    }
+
+    return token
+  },
+
+  lex: fn(self) {
+    tokens := []
+    while self.cur < len(self.text) {
+      array.append(tokens, self.nextToken())
+    }
+    return tokens
+  }
+}
+
+StringLiteral :: struct {
+  token := Token{},
+  value := ""
+}
+
+IntLiteral :: struct {
+  token := Token{},
+  value := 0
+}
+
+FloatLiteral :: struct {
+  token := Token{},
+  value := 0.0
+}
+
+BooleanLiteral :: struct {
+  token := Token{},
+  value := false
+}
+
+ArrayLiteral :: struct {
+  token := Token{},
+  elements := []
+}
+
+ObjectLiteral :: struct {
+  token := Token{},
+  map := {}
+}
+
+NullLiteral :: struct {
+  token := Token{},
+  # don't touch nul value
+  value := nul
+}
+
+ExpressionStatement :: struct {
+  value := nul # can be any literal type
+}
+
+Parser :: struct {
+  # recieves the token stream
+  lexer := Lexer{},
+  currentToken := Token{},
+  peekToken := Token{},
+
+  _fmtError: fn(self, tok, msg) {
+    return "ERROR:" + tok.row + ":" + tok.col + ": " + msg
+  },
+
+  _isError: fn(self, val) {
+    return typeOf(val) == types.STRING
+  },
+
+  _nextToken: fn(self) {
+    self.currentToken = self.peekToken
+    self.peekToken = self.lexer.nextToken()
+  },
+
+  _parseInt: fn(self) {
+    return IntLiteral{
+      token: self.currentToken,
+      value: int(self.currentToken.text)
+    }
+  },
+
+  _parseFloat: fn(self) {
+    return FloatLiteral{
+      token: self.currentToken,
+      value: float(self.currentToken.text)
+    }
+  },
+
+  _parseBoolean: fn(self) {
+    return BooleanLiteral{
+      token: self.currentToken,
+      value: bool(self.currentToken.text)
+    }
+  },
+
+  _parseString: fn(self) {
+    return StringLiteral{
+      token: self.currentToken,
+      value: self.currentToken.text
+    }
+  },
+
+  _parseArray: fn(self) {
+    exp := ArrayLiteral{
+      token: self.currentToken,
+      elements: []
+    }
+
+    if self.peekToken.kind == "]" {
+      self._nextToken()
+      return exp
+    }
+
+    # consume the [ token
+    self._nextToken()
+
+    array.append(exp.elements, self._parseExpression())
+    # consume the current token
+    self._nextToken()
+
+    while self.currentToken.kind == "," {
+      self._nextToken()
+      array.append(exp.elements, self._parseExpression())
+      self._nextToken() # consume the token to access the next one
+    }
+
+    if self.currentToken.kind != "]" {
+      return self._fmtError(self.currentToken, "expected ] after declaration, instead we got "+ self.currentToken.kind)
+    }
+
+    return exp
+  },
+
+  _parseObject: fn(self) {
+    ctok := self.currentToken
+
+    if self.peekToken.kind == "}" {
+      self._nextToken()
+      return ObjectLiteral{
+        token: ctok
+      }
+    }
+
+    expMap := {}
+
+    # consume the { token
+    self._nextToken()
+    # check that the key always needs to be of type string nothing else allowed
+    if self.currentToken.kind != "string" {
+      return self._fmtError(self.currentToken, "fieldName needs to be of type string, instead got" + self.currentToken.kind)
+    }
+    key := self._parseString()
+
+    self._nextToken() # consume the key token
+
+    if self.currentToken.kind != ":" {
+      return self._fmtError(self.currentToken, "expected colon after fieldName, instead got "+ self.currentToken.kind)
+    }
+
+    self._nextToken() # consum colon :
+
+    val := self._parseExpression()
+    if self._isError(val) {
+      return val
+    }
+    hashmap.insert(expMap, key, val)
+
+    # consume the current token
+    self._nextToken()
+    while self.currentToken.kind == "," {
+      self._nextToken()
+
+      if self.currentToken.kind != "string" {
+        return self._fmtError(self.currentToken, "fieldName needs to be of type string, instead got" + self.currentToken.kind)
+      }
+
+      key := self._parseString()
+
+      self._nextToken() # consume the key token
+
+      if self.currentToken.kind != ":" {
+        return self._fmtError(self.currentToken, "expected colon after fieldName, instead got "+ self.currentToken.kind)
+      }
+
+      self._nextToken() # consum colon :
+      val := self._parseExpression()
+      if self._isError(val) {
+        return val
+      }
+      hashmap.insert(expMap, key, val)
+
+      if self.currentToken.kind == "," && self.peekToken.kind == "}" {
+        return self._fmtError(self.currentToken, "last token doesn't require a comma, but comma found "+ self.currentToken.kind)
+      }
+
+      # consume the current token
+      self._nextToken()
+      # fmt.println(self.currentToken)
+    }
+
+    if self.currentToken.kind != "}" {
+      return self._fmtError(self.currentToken, "expected } after declaration, instead we got "+ self.currentToken.kind)
+    }
+
+    return ObjectLiteral{
+      token: ctok,
+      map: expMap
+    }
+  },
+
+  _parseNull: fn(self) {
+    return NullLiteral{
+      token: self.currentToken
+    }
+  },
+
+  _parseExpression: fn(self) {
+    # switch and call the right parsing method
+    if self.currentToken.kind == "string" {
+      return self._parseString()
+    } else if self.currentToken.kind == "boolean" {
+      return self._parseBoolean()
+    } else if self.currentToken.kind == "float" {
+      return self._parseFloat()
+    } else if self.currentToken.kind == "int" {
+      return self._parseInt()
+    } else if self.currentToken.kind == "[" {
+      return self._parseArray()
+    } else if self.currentToken.kind == "{" {
+      return self._parseObject()
+    } else if self.currentToken.kind == "null" {
+      return self._parseNull()
+    }
+  },
+
+  parse: fn(self) {
+    # request tokens as u need them directly
+    ast := []
+    self._nextToken()
+    self._nextToken()
+    while self.lexer.cur < len(self.lexer.text) {
+      # assert token type
+      if self.currentToken.kind == "eof" {
+        break
+      }
+
+      if self.currentToken.kind == "error" {
+        return self._fmtError(self.currentToken, self.currentToken.text)
+      }
+
+      # otherwise do the parsing based on the type
+      # json fields are
+      # <field-name>: <string> | <number> | <boolean> | <array> | <object> | <null>
+      # outer container is either an object | array
+
+      if self.currentToken.kind == "{" || self.currentToken.kind == "[" {
+        val := self._parseExpression()
+
+        # if it is of type string, means it is an error
+        if self._isError(val) {
+          return val
+        }
+
+        # expect a comma
+        self._nextToken()
+
+        # final token doesn't have a comma by design
+        if self.currentToken.kind == "," && self.peekToken.kind != "eof" {
+          self._nextToken() # consume comma ,
+        } else if self.currentToken.kind != "," && self.peekToken.kind != "eof" {
+          return self._fmtError(self.currentToken, "expected comma at the end of field declaration, instead got "+ self.currentToken.kind)
+        } else if self.currentToken.kind == "," && self.peekToken.kind == "eof" {
+          return self._fmtError(self.currentToken, "last token doesn't require a comma, but comma found "+ self.currentToken.kind)
+        }
+        array.append(ast, ExpressionStatement{ value: val })
+
+      } else {
+        # error
+        return self._fmtError(self.currentToken, "outer container is either an object | array, instead got " + self.currentToken.kind)
+      }
+    }
+
+    return ast
+  }
+}
+
+
+# input :: `
+# [
+#   {
+#     "firstName": "John",
+#     "lastName": "Doe",
+#     "isStudent": false,
+#     "courses": ["History", "Math"],
+#     "address": {
+#       "street": "123 Maple St",
+#       "city": "Anytown",
+#       "zip": "12345"
+#     }
+#   }
+# ]
+# `
+
+# exm :: `
+# {
+#   "links": {
+#     "self": "http://example.com/articles",
+#     "next": "http://example.com/articles?page[offset]=2",
+#     "last": "http://example.com/articles?page[offset]=10"
+#   },
+#   "data": [{
+#     "type": "articles",
+#     "id": "1",
+#     "attributes": {
+#       "title": "JSON:API paints my bikeshed!"
+#     },
+#     "relationships": {
+#       "author": {
+#         "links": {
+#           "self": "http://example.com/articles/1/relationships/author",
+#           "related": "http://example.com/articles/1/author"
+#         },
+#         "data": { "type": "people", "id": "9" }
+#       },
+#       "comments": {
+#         "links": {
+#           "self": "http://example.com/articles/1/relationships/comments",
+#           "related": "http://example.com/articles/1/comments"
+#         },
+#         "data": [
+#           { "type": "comments", "id": "5" },
+#           { "type": "comments", "id": "12" }
+#         ]
+#       }
+#     },
+#     "links": {
+#       "self": "http://example.com/articles/1"
+#     }
+#   }],
+#   "included": [{
+#     "type": "people",
+#     "id": "9",
+#     "attributes": {
+#       "firstName": "Dan",
+#       "lastName": "Gebhardt",
+#       "twitter": "dgeb"
+#     },
+#     "links": {
+#       "self": "http://example.com/people/9"
+#     }
+#   }, {
+#     "type": "comments",
+#     "id": "5",
+#     "attributes": {
+#       "body": "First!"
+#     },
+#     "relationships": {
+#       "author": {
+#         "data": { "type": "people", "id": "2" }
+#       }
+#     },
+#     "links": {
+#       "self": "http://example.com/comments/5"
+#     }
+#   }, {
+#     "type": "comments",
+#     "id": "12",
+#     "attributes": {
+#       "body": "I like XML better"
+#     },
+#     "relationships": {
+#       "author": {
+#         "data": { "type": "people", "id": "9" }
+#       }
+#     },
+#     "links": {
+#       "self": "http://example.com/comments/12"
+#     }
+#   }]
+# }
+# `
+
+# usage examples
+# main :: fn() {
+#   lexer := Lexer{
+#     text: exm
+#   }
+#   parser := Parser{
+#     lexer: lexer
+#   }
+#   ast := parser.parse()
+#   if typeOf(ast) == types.STRING {
+#     fmt.println(ast)
+#   } else {
+#     for k, val in ast[0].value.map {
+#         if k.value == "included" {
+#           for _, val in val.elements {
+#             for k, v in val.map {
+#               fmt.println(k.value)
+#             }
+#           }
+#         }
+#       }
+#     }
+# }
+
+# main()
